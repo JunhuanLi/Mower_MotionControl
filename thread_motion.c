@@ -25,7 +25,7 @@
 #include "motion_control.h"
 #include "global.h"
 #include "motor_control.h"
-
+#include "pi.h"
 #include "usart_driver.h"
 #include "lcd12864_io_spi.h"
 
@@ -134,6 +134,7 @@ static void mower_motion_square_position(T_motion* motion,float speed, float sid
 	
 	point_x = side_length;
 	point_y = 0.0f;
+	
 	Motion_Start_2D_Line(&motion->tracker,point_x,point_y,1.0f,0.0f,speed);
 	while(1)
 	{
@@ -142,6 +143,75 @@ static void mower_motion_square_position(T_motion* motion,float speed, float sid
 		Motion_Get_Position_2D(&motion->tracker.sense);
 		Motion_Get_Sensor(&motion->tracker.sense);
 		
+		//debug
+		//rt_kprintf("linear velocity = %d, angular velocity =%d \n\r",(int) (motion.tracker.line_vel*1000), (int) (motion.tracker.angular_vel*1000) );
+
+		if(state == 0 || state == 2 || state == 4 || state == 6)
+		{
+			float dist2 = (point_x - motion->tracker.sense.pos_x) * (point_x - motion->tracker.sense.pos_x) + (point_y - motion->tracker.sense.pos_y) * (point_y - motion->tracker.sense.pos_y);
+			if(dist2 < 0.0025f)  //dist < 0.05m = 5cm
+				state ++;
+
+			Motion_Run_Tracker(&motion->tracker);
+		}
+		else if(state == 1)
+		{
+			Motion_Start_2D_Angle(&motion->tracker, 0.0f, -1.0f, speed);
+			Motion_Run_Tracker(&motion->tracker);
+			motion->tracker.line_vel = 0;
+			
+			if( fabsf(motion->tracker.sense.dir_y + 1.0f) <= 0.005f )
+			{
+				point_x = side_length;
+				point_y = -side_length;
+				Motion_Start_2D_Line(&motion->tracker,point_x,point_y,0.0f,-1.0f,speed);	
+				state ++;
+			}
+		}
+		else if(state == 3)
+		{
+			Motion_Start_2D_Angle(&motion->tracker, -1.0f, 0.0f, speed);
+			Motion_Run_Tracker(&motion->tracker);
+			motion->tracker.line_vel = 0;
+			
+			if( fabsf(motion->tracker.sense.dir_x + 1.0f) <= 0.005f )
+			{
+				point_x = 0.0f;
+				point_y = -side_length;
+				Motion_Start_2D_Line(&motion->tracker,point_x,point_y,-1.0f,0.0f,speed);
+				state ++;
+			}
+		}
+		else if(state == 5)
+		{
+			Motion_Start_2D_Angle(&motion->tracker, 0.0f, 1.0f, speed);
+			Motion_Run_Tracker(&motion->tracker);
+			motion->tracker.line_vel = 0;
+			
+			if( fabsf(motion->tracker.sense.dir_y - 1.0f) <= 0.01f )
+			{
+				point_x = 0.0f;
+				point_y = 0.0f;
+				Motion_Start_2D_Line(&motion->tracker,point_x,point_y,0.0f,1.0f,speed);
+				state ++;
+			}
+		}
+		else if(state == 7)
+		{
+			otion_Start_2D_Angle(&motion->tracker, 1.0f, 0.0f, speed);
+			Motion_Run_Tracker(&motion->tracker);
+			motion->tracker.line_vel = 0;
+			
+			if( fabsf(motion->tracker.sense.dir_x - 1.0f) <= 0.01f )
+			{
+				point_x = side_length;
+				point_y = 0.0f;
+				Motion_Start_2D_Line(&motion->tracker,point_x,point_y,1.0f,0.0f,speed);
+				state = 0;
+			}
+		}
+
+		/*
 		if(state == 0 || state == 2 || state == 4 || state == 6)
 		{
 			float dist2 = (point_x - motion->tracker.sense.pos_x) * (point_x - motion->tracker.sense.pos_x) + (point_y - motion->tracker.sense.pos_y) * (point_y - motion->tracker.sense.pos_y);
@@ -153,7 +223,9 @@ static void mower_motion_square_position(T_motion* motion,float speed, float sid
 		else if(state == 1)
 		{
 			motion->tracker.line_vel = 0;
+			//motion->tracker.line_vel = PI_Run2( &(motion->path_imu.direction_pi), - motion->tracker.line_vel);
 			motion->tracker.angular_vel = speed;
+			//motion->tracker.angular_vel = PI_Run2( &(motion->path_imu.direction_pi), speed - motion->tracker.angular_vel);
 			
 			if(motion->tracker.sense.dir_y < -0.99f)
 			{
@@ -202,6 +274,7 @@ static void mower_motion_square_position(T_motion* motion,float speed, float sid
 				state = 0;
 			}
 		}
+		*/
 		Motion_Process_Motor_Speed(motion);
 		update_motor_control();
 	}
